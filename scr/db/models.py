@@ -77,7 +77,19 @@ class User(Base):
     current_locker_id = Column(Integer, ForeignKey('lockers.id', ondelete='SET NULL'), nullable=True)
 
     contracts = relationship("Contract", back_populates="client", cascade="all, delete-orphan")
-    visits = relationship("Visit", back_populates="client", cascade="all, delete-orphan")
+    # В Visit теперь две ссылки на users (client_id и trainer_id),
+    # поэтому явно указываем по какому FK строится связь.
+    visits = relationship(
+        "Visit",
+        back_populates="client",
+        cascade="all, delete-orphan",
+        foreign_keys="Visit.client_id",
+    )
+    trainer_visits = relationship(
+        "Visit",
+        back_populates="trainer",
+        foreign_keys="Visit.trainer_id",
+    )
     payments = relationship("Payment", back_populates="client", cascade="all, delete-orphan")
     bookings = relationship("Booking", back_populates="client", cascade="all, delete-orphan")
     schedules = relationship("TrainerSchedule", back_populates="trainer_user")
@@ -146,7 +158,9 @@ class TrainingSession(Base):
     end_time = Column(Time, nullable=False)
 
     is_cancelled = Column(Boolean, default=False)
+    is_completed = Column(Boolean, default=False)
     cancellation_reason = Column(Text, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     trainer = relationship("User")
@@ -242,13 +256,17 @@ class Visit(Base):
     __tablename__ = 'visits'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    trainer_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    training_session_id = Column(UUID(as_uuid=True), ForeignKey("training_sessions.id", ondelete="SET NULL"), nullable=True)
     booking_id = Column(UUID(as_uuid=True), ForeignKey('bookings.id', ondelete='CASCADE'))
     visit_type = Column(String(20), nullable=False)  # "gym", "training", "group_class"
     service_id = Column(Integer, ForeignKey('services.id', ondelete='CASCADE'))
     check_in_time = Column(DateTime, nullable=False)
     check_out_time = Column(DateTime)
 
-    client = relationship("User", back_populates="visits")
+    client = relationship("User", back_populates="visits", foreign_keys=[client_id])
+    trainer = relationship("User", back_populates="trainer_visits", foreign_keys=[trainer_id])
+    training_session = relationship("TrainingSession")
     booking = relationship("Booking", back_populates="visits")
     service = relationship("Service", back_populates="visits")
 

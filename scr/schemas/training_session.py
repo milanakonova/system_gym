@@ -52,6 +52,8 @@ class TrainingSessionResponse(BaseModel):
     participants_count: int = 0
     participants: Optional[List[ClientShort]] = None  # только для тренера-владельца
     is_signed: Optional[bool] = None  # только для клиента
+    is_cancelled: bool = False
+    is_completed: bool = False
 
     class Config:
         from_attributes = True

@@ -75,6 +75,16 @@ def _startup_migrations() -> None:
             with engine.begin() as conn:
                 # Зал для расписания тренера
                 conn.execute(text("ALTER TABLE trainer_schedules ADD COLUMN IF NOT EXISTS gym_zone_id INTEGER"))
+
+                # Колонки для логики "занятие проведено" в расписании
+                conn.execute(text("ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS is_completed BOOLEAN DEFAULT FALSE"))
+                conn.execute(text("ALTER TABLE training_sessions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP"))
+
+                # История посещений для тренера (для проведенных тренировок)
+                conn.execute(text("ALTER TABLE visits ADD COLUMN IF NOT EXISTS trainer_id UUID"))
+
+                # Чтобы не было дублей посещений по одному занятию
+                conn.execute(text("ALTER TABLE visits ADD COLUMN IF NOT EXISTS training_session_id UUID"))
     except Exception as e:
         # Не падаем при старте, но печатаем предупреждение
         print(f"[startup migrations] warning: {e}")

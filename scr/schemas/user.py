@@ -66,7 +66,9 @@ class UserResponse(UserBase):
 
 class UserLogin(BaseModel):
     """Схема для входа"""
-    email: EmailStr
+    # Разрешаем ввод не только email (например: "admin" или телефон),
+    # иначе FastAPI отдаст 422 и вход "ломается".
+    email: str
     password: str
 
 

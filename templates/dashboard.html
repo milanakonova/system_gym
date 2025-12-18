@@ -251,6 +251,7 @@
                 await loadZones();
                 document.getElementById('trainerAddBtn').style.display = 'inline-flex';
                 await loadSchedule();
+                await loadMyVisits();
                 // У тренера вкладки абонементов быть не должно
                 const navItems = document.querySelectorAll('.nav-item');
                 navItems.forEach(item => {
@@ -301,6 +302,9 @@
                         ${checkIn.toLocaleDateString()} ${checkIn.toLocaleTimeString()}
                         <span class="visit-method ${visit.method}">${visit.method}</span>
                     </p>
+                    ${visit.client_name ? `<p><strong>Клиент:</strong> ${visit.client_name}</p>` : ''}
+                    ${typeof visit.participants_count === 'number' ? `<p><strong>Записано клиентов:</strong> ${visit.participants_count}</p>` : ''}
+                    ${Array.isArray(visit.clients) && visit.clients.length ? `<p><strong>Клиенты:</strong><br>${visit.clients.map(n => `${n}`).join('<br>')}</p>` : ''}
                     <p>Вход: ${checkIn.toLocaleTimeString()}</p>
                     ${checkOut ? `<p>Выход: ${checkOut.toLocaleTimeString()}</p>` : '<p>Выход: еще внутри</p>'}
                 </div>
@@ -342,7 +346,13 @@
                 });
                 if (!response.ok) {
                     const err = await response.json();
-                    console.error(err);
+                    console.error('Error loading schedule:', err);
+                    const scheduleGrid = document.getElementById('scheduleGrid');
+                    if (scheduleGrid) {
+                        scheduleGrid.innerHTML = `<p class="error">Ошибка загрузки расписания: ${err.detail || 'Неизвестная ошибка'}</p>`;
+                    } else {
+                        showToast(err.detail || 'Ошибка загрузки расписания', true);
+                    }
                     return;
                 }
                 const sessions = await response.json();
@@ -355,7 +365,9 @@
         function displayScheduleSessions(sessions, user) {
             const scheduleGrid = document.getElementById('scheduleGrid');
             if (!scheduleGrid) return;
-            
+
+            console.log('Loading sessions:', sessions); // Отладочный вывод
+
             if (!sessions || sessions.length === 0) {
                 scheduleGrid.innerHTML = '<p class="no-data">На выбранную дату записей нет</p>';
                 return;
@@ -369,27 +381,67 @@
                 const zoneName = s.gym_zone ? s.gym_zone.name : 'Зал не указан';
                 const count = s.participants_count || 0;
 
+                // Проверяем, прошло ли время занятия
+                let isSessionPassed = false;
+                try {
+                    const sessionDateTime = new Date(`${s.session_date}T${s.end_time}`);
+                    const now = new Date();
+                    isSessionPassed = !isNaN(sessionDateTime.getTime()) && sessionDateTime < now;
+                } catch (e) {
+                    console.error('Error parsing session time:', e);
+                }
+
+                const isCancelled = s.is_cancelled;
+                const isCompleted = s.is_completed;
+                let cardStyle = 'border: 1px solid #ddd;';
+
+                if (isCancelled) {
+                    cardStyle = 'border: 2px solid #dc2626; background-color: #fef2f2; opacity: 0.7;';
+                } else if (isCompleted) {
+                    cardStyle = 'border: 2px solid #16a34a; background-color: #f0fdf4; opacity: 0.8;';
+                } else if (isSessionPassed && s.participants_count > 0) {
+                    cardStyle = 'border: 2px solid #f59e0b; background-color: #fef3c7;';
+                }
+
                 html += `
-                <div class="workout-card" style="border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px;">
+                <div class="workout-card" style="${cardStyle} padding: 15px; margin-bottom: 15px; border-radius: 5px;">
                     <div class="workout-header">
-                        <h3>${trainerName}</h3>
-                        <span class="workout-time">${timeStr}</span>
+                        <h3 style="${isCancelled ? 'text-decoration: line-through;' : ''}">${trainerName}</h3>
+                        <span class="workout-time" style="${isCancelled ? 'text-decoration: line-through;' : ''}">${timeStr}</span>
+                        ${isCancelled ? '<span style="color: #dc2626; font-weight: bold; margin-left: 10px;">ОТМЕНЕНО</span>' :
+                         isCompleted ? '<span style="color: #16a34a; font-weight: bold; margin-left: 10px;">ПРОВЕДЕНО</span>' :
+                         isSessionPassed && s.participants_count > 0 ? '<span style="color: #f59e0b; font-weight: bold; margin-left: 10px;">ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ</span>' : ''}
                     </div>
                     <div class="workout-info">
-                        <p><i class="fas fa-map-marker-alt"></i> Зал: ${zoneName}</p>
-                        <p><i class="fas fa-users"></i> Записано: ${count}</p>
+                        <p style="${isCancelled ? 'text-decoration: line-through;' : ''}"><i class="fas fa-map-marker-alt"></i> Зал: ${zoneName}</p>
+                        <p style="${isCancelled ? 'text-decoration: line-through;' : ''}"><i class="fas fa-users"></i> Записано: ${count}</p>
                         ${user.role === 'trainer' && Array.isArray(s.participants) ? `
                             <p style="margin-top:10px;"><strong>Клиенты:</strong></p>
                             <div style="margin-top:6px;">
-                                ${s.participants.length ? s.participants.map(c => `<div style="padding:2px 0;">${c.first_name} ${c.last_name}</div>`).join('') : '<div style="padding:2px 0;">Пока никто не записался</div>'}
+                                ${s.participants.length ? s.participants.map(c => `<div style="padding:2px 0; ${isCancelled ? 'text-decoration: line-through;' : ''}">${c.first_name} ${c.last_name}</div>`).join('') : '<div style="padding:2px 0;">Пока никто не записался</div>'}
                             </div>
                         ` : ''}
                     </div>
                     <div class="workout-actions">
-                        ${user.role === 'client' ? `
+                        ${isCancelled ? `
+                            <span style="color: #6b7280; font-style: italic;">Занятие отменено</span>
+                        ` : isCompleted ? `
+                            <span style="color: #16a34a; font-style: italic;">Занятие проведено</span>
+                        ` : user.role === 'client' ? `
                             <button onclick="signupSession('${s.id}')" class="btn btn-primary btn-sm" ${s.is_signed ? 'disabled' : ''}>
                                 <i class="fas fa-calendar-plus"></i> ${s.is_signed ? 'Вы записаны' : 'Записаться'}
                             </button>
+                        ` : user.role === 'trainer' ? `
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button onclick="cancelSession('${s.id}')" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-times"></i> Отменить занятие
+                                </button>
+                                ${!isCompleted && s.participants_count > 0 ? `
+                                    <button onclick="completeSession('${s.id}')" class="btn btn-success btn-sm">
+                                        <i class="fas fa-check"></i> Занятие проведено
+                                    </button>
+                                ` : ''}
+                            </div>
                         ` : ''}
                     </div>
                 </div>
@@ -419,6 +471,67 @@
             } catch (e) {
                 console.error(e);
                 showToast('Ошибка при записи', true);
+            }
+        }
+
+        async function cancelSession(sessionId) {
+            if (!confirm('Вы уверены, что хотите отменить это занятие? Все записавшиеся клиенты будут уведомлены.')) {
+                return;
+            }
+
+            const token = localStorage.getItem('access_token');
+            if (!token) return;
+
+            try {
+                const response = await fetch(`/api/schedule/${sessionId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    showToast('Занятие отменено');
+                    await loadSchedule();
+                } else {
+                    const err = await response.json();
+                    showToast(err.detail || 'Не удалось отменить занятие', true);
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Ошибка при отмене занятия', true);
+            }
+        }
+
+        async function completeSession(sessionId) {
+            if (!confirm('Отметить занятие как проведенное? У всех записавшихся клиентов будут списаны занятия из абонементов.')) {
+                return;
+            }
+
+            const token = localStorage.getItem('access_token');
+            if (!token) return;
+
+            try {
+                const response = await fetch(`/api/schedule/${sessionId}/complete`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(result.message || 'Занятие отмечено как проведенное');
+                    // Небольшая задержка перед обновлением, чтобы база данных успела обновиться
+                    setTimeout(async () => {
+                        await loadSchedule();
+                        // Не дергаем абонементы для тренера (иначе получаем 403 на /api/passes/me)
+                    }, 500);
+                } else {
+                    const err = await response.json();
+                    showToast(err.detail || 'Не удалось отметить занятие как проведенное', true);
+                }
+            } catch (e) {
+                console.error(e);
+                showToast('Ошибка при отметке занятия', true);
             }
         }
 

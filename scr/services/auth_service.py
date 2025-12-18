@@ -66,8 +66,29 @@ class AuthService:
             )
 
     def login(self, email: str, password: str) -> Token:
-        """Вход пользователя"""
-        user = self.user_repo.get_by_email(email)
+        """Вход пользователя.
+
+        Поддерживаем ввод:
+        - email (admin@gym.com)
+        - логин без домена (admin -> admin@gym.com)
+        - телефон
+        """
+        identifier = (email or "").strip()
+        identifier_l = identifier.lower()
+
+        user = None
+        # 1) Пробуем как email
+        if identifier:
+            user = self.user_repo.get_by_email(identifier_l)
+
+        # 2) Если не нашли и это похоже на логин без домена — пробуем добавить домен проекта
+        if not user and identifier and "@" not in identifier and not identifier.startswith("+") and not identifier.replace("-", "").replace(" ", "").isdigit():
+            user = self.user_repo.get_by_email(f"{identifier_l}@gym.com")
+
+        # 3) Пробуем как телефон (если ввели номер)
+        if not user and identifier:
+            user = self.user_repo.get_by_phone(identifier)
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
