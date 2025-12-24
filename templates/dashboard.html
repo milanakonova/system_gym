@@ -201,11 +201,11 @@
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (response.ok) {
-                    await loadPasses();
+                const data = await response.json();
+                if (response.ok && data.confirmation_url) {
+                    window.location.href = data.confirmation_url;
                 } else {
-                    const err = await response.json();
-                    showToast(err.detail || 'Не удалось пополнить', true);
+                    showToast(data.detail || 'Не удалось пополнить', true);
                 }
             } catch (e) {
                 console.error(e);

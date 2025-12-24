@@ -10,9 +10,14 @@ from sqlalchemy.orm import Session
 from scr.db.database import get_db
 from scr.db.models import User, UserRole, GymZone, ZonePass
 from scr.core.dependencies import require_role
-
+from scr.payment import api
+from scr.core.config import settings
 
 router = APIRouter(prefix="/api/passes", tags=["passes"])
+ZONE_PRICES = {
+        1: float(settings.PRICE_GYM),
+        2: float(settings.PRICE_GROUP),
+        3: float(settings.PRICE_POOL)}
 
 
 def _ensure_client_passes(db: Session, client_id: UUID) -> List[ZonePass]:
@@ -71,17 +76,20 @@ async def topup_pass(
     if not zone:
         raise HTTPException(status_code=404, detail="Зал не найден")
 
-    # Создаем/берем абонемент
-    p = db.query(ZonePass).filter(ZonePass.client_id == current_user.id, ZonePass.gym_zone_id == gym_zone_id).first()
-    if not p:
-        p = ZonePass(client_id=current_user.id, gym_zone_id=gym_zone_id, remaining_visits=0)
-        db.add(p)
-        db.commit()
-        db.refresh(p)
+    # Активируем оплату
+    price = ZONE_PRICES.get(gym_zone_id)
+    if not price:
+        raise HTTPException(status_code=400, detail="Цена не настроена")
 
-    p.remaining_visits += 5
-    db.commit()
+    payment_result = await api.create_payment(
+        amount=price,
+        gym_zone_id=gym_zone_id,
+        current_user=current_user,
+        db=db
+    )
 
-    return {"gym_zone_id": gym_zone_id, "remaining_visits": p.remaining_visits}
-
-
+    # Возвращаем фронту ссылку на оплату
+    return {
+        "confirmation_url": payment_result["confirmation_url"],
+        "status": "ok"
+    }

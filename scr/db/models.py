@@ -289,6 +289,8 @@ class Payment(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey('contracts.id', ondelete='SET NULL'))
+    yookassa_payment_id = Column(String, unique=True, index=True)
+
     amount = Column(Float, nullable=False)
     status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.PENDING)
     paid_at = Column(DateTime)

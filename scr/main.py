@@ -23,6 +23,7 @@ from scr.api.zones import router as zones_router
 from scr.api.schedule import router as schedule_router
 from scr.api.passes import router as passes_router
 from scr.db.database import engine
+from scr.payment.api import router as payment_router
 from sqlalchemy import text
 
 # Создание приложения
@@ -63,6 +64,7 @@ app.include_router(zones_router)
 app.include_router(schedule_router)
 app.include_router(passes_router)
 app.include_router(main_router)
+app.include_router(payment_router)
 
 @app.on_event("startup")
 def _startup_migrations() -> None:
@@ -91,6 +93,7 @@ def _startup_migrations() -> None:
 
     # Создаем новые таблицы/индексы если их еще нет
     try:
+        from scr.db import models
         from scr.db.models import Base
         Base.metadata.create_all(bind=engine)
     except Exception as e:

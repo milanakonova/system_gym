@@ -230,6 +230,3 @@ def init_default_data(session):
     print("  - Создан администратор (admin@gym.com / admin123)")
     print("  - Созданы базовые залы и услуги")
     print("  - Созданы шкафчики")
-
-
-

@@ -19,6 +19,14 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+scr/__pycache__/
+scr/api/__pycache__/
+scr/core/__pycache__/
+scr/db/__pycache__/
+scr/db/repositories/__pycache__/
+scr/module/__pycache__/
+scr/schemas/__pycache__/
+scr/services/__pycache__/
 
 # Virtual Environment
 venv/
